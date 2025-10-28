@@ -1,4 +1,5 @@
 // ai-review.js
+import 'dotenv/config';
 import { execSync } from 'child_process';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 
@@ -37,11 +38,9 @@ async function main() {
   }
 
   // Run ESLint (JS/TS) and capture JSON output (if available)
-  let eslintOut = '';
-  try {
-    eslintOut = run('npx eslint . -f json --no-error-on-unmatched-pattern').slice(0, 8000);
-  } catch (e) {
-    eslintOut = 'ESLint failed or no JS files.';
+  let eslintOut = run('npx eslint . -f json --no-error-on-unmatched-pattern 2>/dev/null').slice(0, 8000);
+  if (!eslintOut || eslintOut.includes('eslint.config')) {
+    eslintOut = 'ESLint not configured.';
   }
 
   // Build prompt (structured)
