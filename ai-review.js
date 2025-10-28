@@ -28,19 +28,21 @@ async function main() {
   }
 
   // Build prompt (structured)
-  const prompt = `
-You are a senior engineer reviewing a pull request. Provide:
-1) One-line summary of change.
-2) Up to 3 potential issues with file + line hints.
-3) Short suggested fix or command to run tests.
-4) Confidence level (low/medium/high) with reason.
+  const prompt = `Review this pull request code changes. Respond ONLY with a structured code review.
 
-Static analyzer output:
+Provide exactly:
+1. Summary: One sentence describing the changes
+2. Issues: List 0-3 potential problems (file:line format)
+3. Suggestions: Brief fix recommendations
+4. Confidence: low/medium/high with brief reason
+
+Static Analysis:
 ${eslintOut}
 
-DIFF:
+Code Diff:
 ${trimmedDiff}
-`.trim().slice(0, 16000);
+
+Respond with the review now.`.trim().slice(0, 16000);
 
   // Call LLM - replace URL + payload with the provider you have
   const lmmUrl = 'https://labs-ai-proxy.acloud.guru/openai/chatgpt-4o/v1/chat/completions'; // example: pluralsight
