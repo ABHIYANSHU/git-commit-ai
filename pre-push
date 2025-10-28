@@ -3,47 +3,8 @@
 
 # Check for staged changes
 if ! git diff --cached --quiet; then
-  echo "Staged changes detected. Generating commit message..."
-  
-  # Generate commit message using AI
-  node ai-commit.js > /tmp/commit-msg.txt 2>&1
-  
-  # Extract just the commit message (first line after "Generated commit message:")
-  COMMIT_MSG=$(git diff --cached | node -e "
-    const { BedrockRuntimeClient, ConverseCommand } = require('@aws-sdk/client-bedrock-runtime');
-    const client = new BedrockRuntimeClient({
-      region: 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-      }
-    });
-    
-    let diff = '';
-    process.stdin.on('data', chunk => diff += chunk);
-    process.stdin.on('end', async () => {
-      const prompt = \`Generate a concise git commit message for these changes:
-\${diff.slice(0, 8000)}
-
-Follow conventional commits format (type: description).
-Keep it under 72 characters.
-Return ONLY the commit message, nothing else.\`;
-      
-      try {
-        const response = await client.send(new ConverseCommand({
-          modelId: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
-          messages: [{ role: 'user', content: [{ text: prompt }] }]
-        }));
-        console.log(response.output.message.content[0].text.trim());
-      } catch (error) {
-        console.log('chore: update files');
-      }
-    });
-  ")
-  
-  # Commit with generated message
-  git commit -m "$COMMIT_MSG"
-  echo "Auto-committed with message: $COMMIT_MSG"
+  echo "Staged changes detected. Running AI commit..."
+  node ai-commit.js
 fi
 
 exit 0
