@@ -12,7 +12,11 @@ const client = new BedrockRuntimeClient({
 
 function run(cmd) {
   try { return execSync(cmd, { encoding: 'utf8' }); }
-  catch (e) { return e.stdout ? e.stdout.toString() : ''; }
+  catch (e) {
+    console.error(`Command failed: ${cmd}`);
+    console.error(e.message);
+    return e.stdout ? e.stdout.toString() : '';
+  }
 }
 
 function scrubSecrets(text) {

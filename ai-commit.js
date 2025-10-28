@@ -1,4 +1,5 @@
 // ai-commit.js
+import 'dotenv/config';
 import { execSync } from 'child_process';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 
@@ -12,7 +13,11 @@ const client = new BedrockRuntimeClient({
 
 function run(cmd) {
   try { return execSync(cmd, { encoding: 'utf8' }); }
-  catch (e) { return ''; }
+  catch (e) {
+    console.error(`Command failed: ${cmd}`);
+    console.error(e.message);
+    return '';
+  }
 }
 
 async function main() {
