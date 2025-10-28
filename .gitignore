@@ -1,2 +1,5 @@
 node_modules*
 .env
+test-api.js
+test-openai-direct.js
+.env.example

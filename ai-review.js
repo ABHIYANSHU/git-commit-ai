@@ -1,10 +1,18 @@
-// ai-review.js
+// ai-review.js - Automated AI code review for GitHub pull requests
 import 'dotenv/config';
 import { execSync } from 'child_process';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 
+// Validate AWS credentials are present
+if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+  console.error('Error: AWS credentials are missing.');
+  console.error('Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.');
+  process.exit(1);
+}
+
+// Initialize AWS Bedrock client for Claude AI
 const client = new BedrockRuntimeClient({
-  region: process.env.AWS_REGION,
+  region: process.env.AWS_REGION || 'us-east-1',
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
@@ -20,15 +28,15 @@ function run(cmd) {
   }
 }
 
+// Remove sensitive information from diff before sending to AI
 function scrubSecrets(text) {
-  // naive patterns — expand as needed
   return text
     .replace(/AKIA[0-9A-Z]{16}/g, '[REDACTED_AWS_KEY]')
     .replace(/(?:ssh-rsa|ssh-ed25519)\\s+[A-Za-z0-9+/=]+/g, '[REDACTED_SSH_KEY]');
 }
 
 async function main() {
-  // PR diff relative to main — limited hunks only
+  // Get PR diff (changes between main branch and current HEAD)
   const diff = run('git --no-pager diff origin/main...HEAD --unified=0').slice(0, 9000);
   const trimmedDiff = scrubSecrets(diff);
   
@@ -37,7 +45,7 @@ async function main() {
     return;
   }
 
-  // Run ESLint (JS/TS) and capture JSON output (if available)
+  // Run ESLint for additional code quality insights
   let eslintOut = run('npx eslint . -f json --no-error-on-unmatched-pattern 2>/dev/null').slice(0, 8000);
   if (!eslintOut || eslintOut.includes('eslint.config')) {
     eslintOut = 'ESLint not configured.';
@@ -73,6 +81,7 @@ async function main() {
 
   Start your review now.`.trim().slice(0, 16000);
 
+  // Call Claude AI for code review
   let commentText;
   try {
     const response = await client.send(new ConverseCommand({
@@ -93,7 +102,7 @@ async function main() {
 
   console.log('\n--- LLM Generated Review ---\n', commentText);
 
-  // Compute PR number
+  // Extract PR number from GitHub environment
   const ref = process.env.GITHUB_REF || '';
   const prMatch = ref.match(/refs\/pull\/(\d+)\/merge/) || ref.match(/pull\/(\d+)/);
   const prNumber = (prMatch && prMatch[1]) || process.env.PR_NUMBER;
@@ -110,6 +119,7 @@ async function main() {
     process.exit(1);
   }
 
+  // Post AI review as PR comment
   const commentBody = `**AI Review (automated):**\n\n${commentText}\n\n_AI suggestion — review required._`;
 
   const postRes = await fetch(`https://api.github.com/repos/${repo}/issues/${prNumber}/comments`, {
