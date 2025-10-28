@@ -74,19 +74,30 @@ ${trimmedDiff}
   }
 
   const txt = await res.text();
-  let json;
-  try {
-    json = JSON.parse(txt);
-    // Validate expected structure to prevent untrusted deserialization
-    if (typeof json !== 'object' || json === null) {
-      throw new Error('Invalid response format');
+  let commentText = '';
+  
+  // Handle SSE streaming format
+  if (txt.startsWith('data:')) {
+    const lines = txt.split('\n').filter(line => line.startsWith('data:'));
+    for (const line of lines) {
+      try {
+        const data = JSON.parse(line.slice(5).trim());
+        if (data.token) commentText += data.token;
+      } catch (e) { /* skip invalid lines */ }
     }
-  } catch (e) {
-    console.error('Failed to parse JSON response:', txt.slice(0, 500));
-    process.exit(1);
+  } else {
+    // Handle standard JSON response
+    try {
+      const json = JSON.parse(txt);
+      if (typeof json !== 'object' || json === null) {
+        throw new Error('Invalid response format');
+      }
+      commentText = json.choices?.[0]?.message?.content ?? JSON.stringify(json, null, 2);
+    } catch (e) {
+      console.error('Failed to parse JSON response:', txt.slice(0, 500));
+      process.exit(1);
+    }
   }
-  // Different providers return different shapes. For OpenAI-compatible, take first choice:
-  const commentText = json.choices?.[0]?.message?.content ?? JSON.stringify(json, null, 2);
 
   // Compute PR number
   const ref = process.env.GITHUB_REF || '';
