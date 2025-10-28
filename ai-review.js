@@ -43,7 +43,7 @@ ${trimmedDiff}
 `.trim().slice(0, 16000);
 
   // Call LLM - replace URL + payload with the provider you have
-  const lmmUrl = 'https://labs-ai-proxy.acloud.guru/stream/openai/chatgpt-4o/v1/chat/completions'; // example: pluralsight
+  const lmmUrl = 'https://labs-ai-proxy.acloud.guru/openai/chatgpt-4o/v1/chat/completions'; // example: pluralsight
   const apiKey = process.env.LLM_API_KEY;
   if (!apiKey) {
     console.error('LLM_API_KEY not set. Exiting.');
@@ -72,7 +72,14 @@ ${trimmedDiff}
     process.exit(1);
   }
 
-  const json = await res.json();
+  let json;
+  try {
+    json = await res.json();
+  } catch (e) {
+    const txt = await res.text();
+    console.error('Failed to parse JSON response:', txt.slice(0, 500));
+    process.exit(1);
+  }
   // Different providers return different shapes. For OpenAI-compatible, take first choice:
   const commentText = json.choices?.[0]?.message?.content ?? JSON.stringify(json, null, 2);
 
