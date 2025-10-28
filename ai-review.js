@@ -72,11 +72,11 @@ ${trimmedDiff}
     process.exit(1);
   }
 
+  const txt = await res.text();
   let json;
   try {
-    json = await res.json();
+    json = JSON.parse(txt);
   } catch (e) {
-    const txt = await res.text();
     console.error('Failed to parse JSON response:', txt.slice(0, 500));
     process.exit(1);
   }
