@@ -54,7 +54,8 @@ ${trimmedDiff}
     model: "gpt-4o-mini", // adjust to your model
     messages: [{ role: 'user', content: prompt }],
     max_tokens: 800,
-    temperature: 0.2
+    temperature: 0.2,
+    stream: false
   };
 
   const res = await fetch(lmmUrl, {
@@ -76,6 +77,10 @@ ${trimmedDiff}
   let json;
   try {
     json = JSON.parse(txt);
+    // Validate expected structure to prevent untrusted deserialization
+    if (typeof json !== 'object' || json === null) {
+      throw new Error('Invalid response format');
+    }
   } catch (e) {
     console.error('Failed to parse JSON response:', txt.slice(0, 500));
     process.exit(1);
