@@ -18,7 +18,13 @@ async function main() {
   // PR diff relative to main — limited hunks only
   const diff = run('git --no-pager diff origin/main...HEAD --unified=0').slice(0, 9000);
   const trimmedDiff = scrubSecrets(diff);
-  console.log(trimmedDiff)
+  
+  if (!trimmedDiff || trimmedDiff.trim().length === 0) {
+    console.log('No changes detected in diff. Exiting.');
+    return;
+  }
+  
+  console.log('Diff to review:', trimmedDiff)
 
   // Run ESLint (JS/TS) and capture JSON output (if available)
   let eslintOut = '';
@@ -29,19 +35,21 @@ async function main() {
   }
 
   // Build prompt (structured)
-  const userPrompt = `Analyze this pull request diff and provide a code review.
+  const userPrompt = `CODE REVIEW REQUIRED
 
-Static Analysis:
-${eslintOut}
+You must review the following code changes:
 
-Code Diff:
 ${trimmedDiff}
 
-Provide:
-1. Summary: One sentence
-2. Issues: 0-3 problems with file:line
-3. Suggestions: Brief fixes
-4. Confidence: low/medium/high with reason`.trim().slice(0, 16000);
+ESLint output: ${eslintOut}
+
+Provide a structured review with:
+- Summary (1 sentence)
+- Issues found (0-3 with file:line)
+- Suggestions
+- Confidence level
+
+Do not introduce yourself. Start with the review.`.trim().slice(0, 16000);
 
   // Call LLM - replace URL + payload with the provider you have
   const lmmUrl = 'https://labs-ai-proxy.acloud.guru/openai/chatgpt-4o/v1/chat/completions'; // example: pluralsight
@@ -54,11 +62,11 @@ Provide:
   const body = {
     model: "chatgpt-4o",
     messages: [
-      { role: 'system', content: 'You are a code reviewer. Analyze code changes and provide structured feedback.' },
+      { role: 'system', content: 'You are a senior software engineer performing code reviews. You analyze git diffs and provide concise, actionable feedback. Never introduce yourself.' },
       { role: 'user', content: userPrompt }
     ],
     max_tokens: 2000,
-    temperature: 0.2,
+    temperature: 0.1,
     stream: false
   };
 
