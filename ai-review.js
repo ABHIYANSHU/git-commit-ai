@@ -43,7 +43,7 @@ ${trimmedDiff}
 `.trim().slice(0, 16000);
 
   // Call LLM - replace URL + payload with the provider you have
-  const lmmUrl = 'https://labs-ai-proxy.acloud.guru/'; // example: pluralsight
+  const lmmUrl = 'https://labs-ai-proxy.acloud.guru/stream/openai/chatgpt-4o/v1/chat/completions'; // example: pluralsight
   const apiKey = process.env.LLM_API_KEY;
   if (!apiKey) {
     console.error('LLM_API_KEY not set. Exiting.');
