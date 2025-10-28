@@ -29,21 +29,19 @@ async function main() {
   }
 
   // Build prompt (structured)
-  const prompt = `Review this pull request code changes. Respond ONLY with a structured code review.
+  const userPrompt = `Analyze this pull request diff and provide a code review.
 
-    Provide exactly:
-    1. Summary: One sentence describing the changes
-    2. Issues: List 0-3 potential problems (file:line format)
-    3. Suggestions: Brief fix recommendations
-    4. Confidence: low/medium/high with brief reason
+Static Analysis:
+${eslintOut}
 
-    Static Analysis:
-    ${eslintOut}
+Code Diff:
+${trimmedDiff}
 
-    Code Diff:
-    ${trimmedDiff}
-
-    Respond with the review now.`.trim().slice(0, 16000);
+Provide:
+1. Summary: One sentence
+2. Issues: 0-3 problems with file:line
+3. Suggestions: Brief fixes
+4. Confidence: low/medium/high with reason`.trim().slice(0, 16000);
 
   // Call LLM - replace URL + payload with the provider you have
   const lmmUrl = 'https://labs-ai-proxy.acloud.guru/openai/chatgpt-4o/v1/chat/completions'; // example: pluralsight
@@ -54,8 +52,11 @@ async function main() {
   }
 
   const body = {
-    model: "chatgpt-4o", // adjust to your model
-    messages: [{ role: 'user', content: prompt }],
+    model: "chatgpt-4o",
+    messages: [
+      { role: 'system', content: 'You are a code reviewer. Analyze code changes and provide structured feedback.' },
+      { role: 'user', content: userPrompt }
+    ],
     max_tokens: 2000,
     temperature: 0.2,
     stream: false
