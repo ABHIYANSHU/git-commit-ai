@@ -55,7 +55,7 @@ Respond with the review now.`.trim().slice(0, 16000);
   const body = {
     model: "gpt-4o-mini", // adjust to your model
     messages: [{ role: 'user', content: prompt }],
-    max_tokens: 800,
+    max_tokens: 2000,
     temperature: 0.2,
     stream: false
   };
