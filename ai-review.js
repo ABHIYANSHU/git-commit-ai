@@ -131,6 +131,8 @@ ${trimmedDiff}
   if (!postRes.ok) {
     const txt = await postRes.text();
     console.error('Failed to post comment', postRes.status, txt);
+    console.log('\n--- AI Review (unable to post) ---\n', commentText);
+    console.error('\nNote: Ensure GITHUB_TOKEN has "pull-requests: write" or "issues: write" permission in workflow.');
     process.exit(1);
   }
 
