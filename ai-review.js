@@ -1,7 +1,6 @@
 // ai-review.js
 import { execSync } from 'child_process';
-import fetch from 'node:node_fetch' // if node does not have global fetch, use node-fetch pkg
-// If Node 20 in GitHub Actions, global fetch is available; adjust accordingly.
+// Using global fetch available in Node.js 18+
 
 function run(cmd) {
   try { return execSync(cmd, { encoding: 'utf8' }); }
@@ -79,11 +78,11 @@ ${trimmedDiff}
 
   // Compute PR number
   const ref = process.env.GITHUB_REF || '';
-  const prMatch = ref.match(/refs\\/pull\\/(\\d+)\\/merge/) || ref.match(/pull\\/(\\d+)/);
+  const prMatch = ref.match(/refs\/pull\/(\d+)\/merge/) || ref.match(/pull\/(\d+)/);
   const prNumber = (prMatch && prMatch[1]) || process.env.PR_NUMBER;
   if (!prNumber) {
     console.error('PR number not found in GITHUB_REF:', process.env.GITHUB_REF);
-    console.log('--- LLM output (local preview) ---\\n', commentText);
+    console.log('--- LLM output (local preview) ---\n', commentText);
     return;
   }
 
