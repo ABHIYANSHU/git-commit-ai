@@ -60,14 +60,9 @@ Do not introduce yourself. Start with the review.`.trim().slice(0, 16000);
   }
 
   const body = {
-    model: "chatgpt-4o",
     messages: [
-      { role: 'system', content: 'You are a senior software engineer performing code reviews. You analyze git diffs and provide concise, actionable feedback. Never introduce yourself.' },
       { role: 'user', content: userPrompt }
-    ],
-    max_tokens: 2000,
-    temperature: 0.1,
-    stream: false
+    ]
   };
 
   const res = await fetch(lmmUrl, {
