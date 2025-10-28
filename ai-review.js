@@ -1,6 +1,14 @@
 // ai-review.js
 import { execSync } from 'child_process';
-// Using global fetch available in Node.js 18+
+import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+
+const client = new BedrockRuntimeClient({
+  region: 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  }
+});
 
 function run(cmd) {
   try { return execSync(cmd, { encoding: 'utf8' }); }
@@ -18,7 +26,11 @@ async function main() {
   // PR diff relative to main — limited hunks only
   const diff = run('git --no-pager diff origin/main...HEAD --unified=0').slice(0, 9000);
   const trimmedDiff = scrubSecrets(diff);
-  console.log(trimmedDiff)
+  
+  if (!trimmedDiff || trimmedDiff.trim().length === 0) {
+    console.log('No changes detected in diff. Exiting.');
+    return;
+  }
 
   // Run ESLint (JS/TS) and capture JSON output (if available)
   let eslintOut = '';
@@ -29,78 +41,51 @@ async function main() {
   }
 
   // Build prompt (structured)
-  const userPrompt = `Analyze this pull request diff and provide a code review.
+  const userPrompt = `You are an expert code reviewer. Analyze the following code changes and provide a comprehensive review.
 
-Static Analysis:
-${eslintOut}
+  CODE CHANGES:
+  ${trimmedDiff}
 
-Code Diff:
-${trimmedDiff}
+  LINTER OUTPUT:
+  ${eslintOut}
 
-Provide:
-1. Summary: One sentence
-2. Issues: 0-3 problems with file:line
-3. Suggestions: Brief fixes
-4. Confidence: low/medium/high with reason`.trim().slice(0, 16000);
+  REVIEW INSTRUCTIONS:
+  1. Identify bugs, security vulnerabilities, and logic errors
+  2. Check for code quality issues (readability, maintainability, performance)
+  3. Verify best practices and design patterns
+  4. Note any potential runtime errors or edge cases
+  5. Consider the ESLint output for additional context
 
-  // Call LLM - replace URL + payload with the provider you have
-  const lmmUrl = 'https://labs-ai-proxy.acloud.guru/openai/chatgpt-4o/v1/chat/completions'; // example: pluralsight
-  const apiKey = process.env.LLM_API_KEY;
-  if (!apiKey) {
-    console.error('LLM_API_KEY not set. Exiting.');
-    process.exit(1);
-  }
+  PROVIDE YOUR REVIEW IN THIS FORMAT:
 
-  const body = {
-    model: "chatgpt-4o",
-    messages: [
-      { role: 'system', content: 'You are a code reviewer. Analyze code changes and provide structured feedback.' },
-      { role: 'user', content: userPrompt }
-    ],
-    max_tokens: 2000,
-    temperature: 0.2,
-    stream: false
-  };
+  **Summary:** (One sentence overview)
 
-  const res = await fetch(lmmUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
+  **Critical Issues:** (List 0-3 critical problems with file:line references)
 
-  if (!res.ok) {
-    const txt = await res.text();
-    console.error('LLM call failed', res.status, txt);
-    process.exit(1);
-  }
+  **Suggestions:** (Improvements and best practices)
 
-  const txt = await res.text();
-  let commentText = '';
-  
-  // Handle SSE streaming format
-  if (txt.startsWith('data:')) {
-    const lines = txt.split('\n').filter(line => line.startsWith('data:'));
-    for (const line of lines) {
-      try {
-        const data = JSON.parse(line.slice(5).trim());
-        if (data.token) commentText += data.token;
-      } catch (e) { /* skip invalid lines */ }
-    }
-  } else {
-    // Handle standard JSON response
-    try {
-      const json = JSON.parse(txt);
-      if (typeof json !== 'object' || json === null) {
-        throw new Error('Invalid response format');
-      }
-      commentText = json.choices?.[0]?.message?.content ?? JSON.stringify(json, null, 2);
-    } catch (e) {
-      console.error('Failed to parse JSON response:', txt.slice(0, 500));
-      process.exit(1);
-    }
+  **Security Concerns:** (If any)
+
+  **Confidence Level:** (High/Medium/Low)
+
+  Start your review now.`.trim().slice(0, 16000);
+
+  let commentText;
+  try {
+    const response = await client.send(new ConverseCommand({
+      modelId: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
+      messages: [{
+        role: 'user',
+        content: [{ text: userPrompt }]
+      }]
+    }));
+
+    commentText = response.output.message.content[0].text;
+    const usage = response.usage;
+    console.log('Token usage:', { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens });
+  } catch (error) {
+    console.error('AWS Bedrock API call failed:', error.message);
+    commentText = `⚠️ AI review failed: ${error.message}\n\nPlease review the code changes manually.`;
   }
 
   console.log('\n--- LLM Generated Review ---\n', commentText);

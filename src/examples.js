@@ -20,3 +20,10 @@ export function divide(a, b) {
 export function power(base, exponent) {
   return base ** exponent;
 }
+
+export function sqrt(a) {
+  if (a < 0) {
+    throw new Error('Cannot calculate square root of a negative number');
+  }
+  return Math.sqrt(a);
+}
