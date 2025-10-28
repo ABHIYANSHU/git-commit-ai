@@ -1,75 +1,78 @@
 // ai-commit.js - Generates AI-powered commit messages from staged changes
-import 'dotenv/config';
 import simpleGit from 'simple-git';
-import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+import { createBedrockClient, callAI, sanitizeText, log } from './utils.js';
+import { DIFF_CONFIG, COMMIT_CONFIG } from './config.js';
 
 const git = simpleGit();
+let client;
 
-// Validate AWS credentials are present
-if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-  console.error('Error: AWS credentials are missing.');
-  console.error('Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.');
+// Initialize client with error handling
+try {
+  client = createBedrockClient();
+} catch (error) {
+  console.error('Initialization failed:', error.message);
   process.exit(1);
 }
 
-// Initialize AWS Bedrock client for Claude AI
-const client = new BedrockRuntimeClient({
-  region: process.env.AWS_REGION || 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+// Summarize large diffs for better AI context
+async function summarizeDiff(diff) {
+  if (diff.length <= DIFF_CONFIG.MAX_SIZE) {
+    return diff;
   }
-});
 
-async function main() {
-  // Get staged changes
-  let diff = await git.diff(['--cached']);
+  log(`Large diff detected (${diff.length} chars), creating summary...`);
+  const stat = await git.diff(['--cached', '--stat']);
+  const diffSummary = await git.diffSummary(['--cached']);
   
-  if (!diff || diff.trim().length === 0) {
-    console.log('No staged changes found. Use "git add" first.');
-    process.exit(1);
-  }
+  const fileChanges = diffSummary.files.map(f => 
+    `${f.file}: +${f.insertions} -${f.deletions}`
+  ).join('\n');
+  
+  return `Files changed:\n${fileChanges}\n\nStats:\n${stat}\n\nKey changes:\n${diff.slice(0, DIFF_CONFIG.SUMMARY_SIZE)}`;
+}
 
-  // For large diffs (>8KB), create a summary with file stats and partial diff
-  let diffContent = diff;
-  if (diff.length > 8000) {
-    const stat = await git.diff(['--cached', '--stat']);
-    const summary = await git.diff(['--cached', '--numstat']);
-    const diffSummary = await git.diffSummary(['--cached']);
-    
-    const fileChanges = diffSummary.files.map(f => 
-      `${f.file}: +${f.insertions} -${f.deletions}`
-    ).join('\n');
-    
-    diffContent = `Files changed:\n${fileChanges}\n\nStats:\n${stat}\n\nKey changes:\n${diff.slice(0, 3000)}`;
-  }
-
-  const prompt = `Generate a concise git commit message for these changes:
+// Build prompt for commit message generation
+function buildPrompt(diffContent) {
+  return `Generate a concise git commit message for these changes:
 
 ${diffContent}
 
 Follow conventional commits format (type: description).
-Types: feat, fix, docs, style, refactor, test, chore.
-Keep it under 72 characters.
+Types: ${COMMIT_CONFIG.TYPES.join(', ')}.
+Keep it under ${COMMIT_CONFIG.MAX_LENGTH} characters.
 Return ONLY the commit message, nothing else.`;
+}
 
+async function main() {
   try {
-    // Call Claude AI via AWS Bedrock to generate commit message
-    const response = await client.send(new ConverseCommand({
-      modelId: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
-      messages: [{ role: 'user', content: [{ text: prompt }] }]
-    }));
+    // Get staged changes
+    log('Checking for staged changes...');
+    const diff = await git.diff(['--cached']);
+    
+    if (!diff || diff.trim().length === 0) {
+      log('No staged changes found. Use "git add" first.', 'warn');
+      process.exit(1);
+    }
 
-    // Extract and sanitize the commit message
-    const message = response.output.message.content[0].text.trim().replace(/[\n\r]/g, ' ');
+    // Summarize if needed
+    const diffContent = await summarizeDiff(diff);
+    const prompt = buildPrompt(diffContent);
+
+    // Call AI with retry logic
+    log('Generating commit message...');
+    const { text, usage } = await callAI(client, prompt);
+    const message = sanitizeText(text);
+    
+    log(`Token usage: ${usage.inputTokens} in, ${usage.outputTokens} out, ${usage.totalTokens} total`);
     console.log('\nGenerated commit message:', message);
     
-    // Commit staged changes with AI-generated message
+    // Commit staged changes
+    log('Committing changes...');
     await git.commit(message);
-    console.log('✓ Changes committed successfully!');
+    log('Changes committed successfully!', 'info');
     console.log('\nYou can now run: git push');
   } catch (error) {
-    console.error('Failed to generate commit message:', error.message);
+    log(`Failed: ${error.message}`, 'error');
     process.exit(1);
   }
 }

@@ -1,23 +1,17 @@
 // ai-review.js - Automated AI code review for GitHub pull requests
-import 'dotenv/config';
 import { execSync } from 'child_process';
-import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+import { createBedrockClient, callAI, log } from './utils.js';
+import { DIFF_CONFIG } from './config.js';
 
-// Validate AWS credentials are present
-if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-  console.error('Error: AWS credentials are missing.');
-  console.error('Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.');
+let client;
+
+// Initialize client with error handling
+try {
+  client = createBedrockClient();
+} catch (error) {
+  console.error('Initialization failed:', error.message);
   process.exit(1);
 }
-
-// Initialize AWS Bedrock client for Claude AI
-const client = new BedrockRuntimeClient({
-  region: process.env.AWS_REGION || 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  }
-});
 
 function run(cmd) {
   try { return execSync(cmd, { encoding: 'utf8' }); }
@@ -37,7 +31,7 @@ function scrubSecrets(text) {
 
 async function main() {
   // Get PR diff (changes between main branch and current HEAD)
-  const diff = run('git --no-pager diff origin/main...HEAD --unified=0').slice(0, 9000);
+  const diff = run('git --no-pager diff origin/main...HEAD --unified=0').slice(0, DIFF_CONFIG.MAX_DIFF_FOR_PR);
   const trimmedDiff = scrubSecrets(diff);
   
   if (!trimmedDiff || trimmedDiff.trim().length === 0) {
@@ -46,7 +40,7 @@ async function main() {
   }
 
   // Run ESLint for additional code quality insights
-  let eslintOut = run('npx eslint . -f json --no-error-on-unmatched-pattern 2>/dev/null').slice(0, 8000);
+  let eslintOut = run('npx eslint . -f json --no-error-on-unmatched-pattern 2>/dev/null').slice(0, DIFF_CONFIG.MAX_ESLINT_OUTPUT);
   if (!eslintOut || eslintOut.includes('eslint.config')) {
     eslintOut = 'ESLint not configured.';
   }
@@ -81,22 +75,15 @@ async function main() {
 
   Start your review now.`.trim().slice(0, 16000);
 
-  // Call Claude AI for code review
+  // Call AI for code review with retry logic
   let commentText;
   try {
-    const response = await client.send(new ConverseCommand({
-      modelId: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
-      messages: [{
-        role: 'user',
-        content: [{ text: userPrompt }]
-      }]
-    }));
-
-    commentText = response.output.message.content[0].text;
-    const usage = response.usage;
-    console.log('Token usage:', { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens });
+    log('Calling AI for code review...');
+    const { text, usage } = await callAI(client, userPrompt);
+    commentText = text;
+    log(`Token usage: ${usage.inputTokens} in, ${usage.outputTokens} out, ${usage.totalTokens} total`);
   } catch (error) {
-    console.error('AWS Bedrock API call failed:', error.message);
+    log(`AI review failed: ${error.message}`, 'error');
     commentText = `⚠️ AI review failed: ${error.message}\n\nPlease review the code changes manually.`;
   }
 
