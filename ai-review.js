@@ -31,8 +31,6 @@ async function main() {
     console.log('No changes detected in diff. Exiting.');
     return;
   }
-  
-  console.log('Diff to review:', trimmedDiff)
 
   // Run ESLint (JS/TS) and capture JSON output (if available)
   let eslintOut = '';
@@ -43,33 +41,52 @@ async function main() {
   }
 
   // Build prompt (structured)
-  const userPrompt = `CODE REVIEW REQUIRED
+  const userPrompt = `You are an expert code reviewer. Analyze the following code changes and provide a comprehensive review.
 
-You must review the following code changes:
+  CODE CHANGES:
+  ${trimmedDiff}
 
-${trimmedDiff}
+  LINTER OUTPUT:
+  ${eslintOut}
 
-ESLint output: ${eslintOut}
+  REVIEW INSTRUCTIONS:
+  1. Identify bugs, security vulnerabilities, and logic errors
+  2. Check for code quality issues (readability, maintainability, performance)
+  3. Verify best practices and design patterns
+  4. Note any potential runtime errors or edge cases
+  5. Consider the ESLint output for additional context
 
-Provide a structured review with:
-- Summary (1 sentence)
-- Issues found (0-3 with file:line)
-- Suggestions
-- Confidence level
+  PROVIDE YOUR REVIEW IN THIS FORMAT:
 
-Do not introduce yourself. Start with the review.`.trim().slice(0, 16000);
+  **Summary:** (One sentence overview)
 
-  console.log('Calling LLM with prompt:', userPrompt);
+  **Critical Issues:** (List 0-3 critical problems with file:line references)
 
-  const response = await client.send(new ConverseCommand({
-    modelId: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
-    messages: [{
-      role: 'user',
-      content: [{ text: userPrompt }]
-    }]
-  }));
+  **Suggestions:** (Improvements and best practices)
 
-  const commentText = response.output.message.content[0].text;
+  **Security Concerns:** (If any)
+
+  **Confidence Level:** (High/Medium/Low)
+
+  Start your review now.`.trim().slice(0, 16000);
+
+  let commentText;
+  try {
+    const response = await client.send(new ConverseCommand({
+      modelId: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
+      messages: [{
+        role: 'user',
+        content: [{ text: userPrompt }]
+      }]
+    }));
+
+    commentText = response.output.message.content[0].text;
+    const usage = response.usage;
+    console.log('Token usage:', { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens });
+  } catch (error) {
+    console.error('AWS Bedrock API call failed:', error.message);
+    commentText = `⚠️ AI review failed: ${error.message}\n\nPlease review the code changes manually.`;
+  }
 
   console.log('\n--- LLM Generated Review ---\n', commentText);
 
