@@ -102,6 +102,8 @@ async function main() {
     }
   }
 
+  console.log('\n--- LLM Generated Review ---\n', commentText);
+
   // Compute PR number
   const ref = process.env.GITHUB_REF || '';
   const prMatch = ref.match(/refs\/pull\/(\d+)\/merge/) || ref.match(/pull\/(\d+)/);
