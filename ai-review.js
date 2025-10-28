@@ -1,7 +1,7 @@
 // ai-review.js - Automated AI code review for GitHub pull requests
 import { execSync } from 'child_process';
 import { createBedrockClient, callAI, log } from './utils.js';
-import { DIFF_CONFIG } from './config.js';
+import { DIFF_CONFIG, sanitizeESLintOutput } from './config.js';
 
 let client;
 
@@ -40,10 +40,8 @@ async function main() {
   }
 
   // Run ESLint for additional code quality insights
-  let eslintOut = run('npx eslint . -f json --no-error-on-unmatched-pattern 2>/dev/null').slice(0, DIFF_CONFIG.MAX_ESLINT_OUTPUT);
-  if (!eslintOut || eslintOut.includes('eslint.config')) {
-    eslintOut = 'ESLint not configured.';
-  }
+  const eslintRaw = run('npx eslint . -f json --no-error-on-unmatched-pattern 2>/dev/null').slice(0, DIFF_CONFIG.MAX_ESLINT_OUTPUT);
+  const eslintOut = sanitizeESLintOutput(eslintRaw);
 
   // Build prompt (structured)
   const userPrompt = `You are an expert code reviewer. Analyze the following code changes and provide a comprehensive review.

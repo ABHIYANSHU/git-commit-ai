@@ -3,8 +3,8 @@ import 'dotenv/config';
 
 // AWS Bedrock Configuration
 export const AWS_CONFIG = {
-  REGION: process.env.AWS_REGION || 'us-east-1',
-  MODEL_ID: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
+  REGION: process.env.AWS_REGION,
+  MODEL_ID: process.env.AWS_MODEL_ID || 'anthropic.claude-3-5-sonnet-20240620-v1:0',
   MAX_RETRIES: 3,
   RETRY_DELAY_MS: 1000
 };
@@ -30,5 +30,24 @@ export function validateEnv() {
   
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+}
+
+// Sanitize ESLint output to remove sensitive information
+export function sanitizeESLintOutput(output) {
+  if (!output || output.includes('eslint.config')) {
+    return 'ESLint not configured.';
+  }
+  
+  try {
+    const parsed = JSON.parse(output);
+    // Remove file paths, keep only rule violations
+    return parsed.map(file => ({
+      errorCount: file.errorCount,
+      warningCount: file.warningCount,
+      messages: file.messages?.map(m => `${m.ruleId}: ${m.message}`) || []
+    }));
+  } catch {
+    return 'ESLint output could not be parsed.';
   }
 }
