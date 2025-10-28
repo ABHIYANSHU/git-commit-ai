@@ -18,6 +18,7 @@ async function main() {
   // PR diff relative to main — limited hunks only
   const diff = run('git --no-pager diff origin/main...HEAD --unified=0').slice(0, 9000);
   const trimmedDiff = scrubSecrets(diff);
+  console.log(trimmedDiff)
 
   // Run ESLint (JS/TS) and capture JSON output (if available)
   let eslintOut = '';
@@ -30,19 +31,19 @@ async function main() {
   // Build prompt (structured)
   const prompt = `Review this pull request code changes. Respond ONLY with a structured code review.
 
-Provide exactly:
-1. Summary: One sentence describing the changes
-2. Issues: List 0-3 potential problems (file:line format)
-3. Suggestions: Brief fix recommendations
-4. Confidence: low/medium/high with brief reason
+    Provide exactly:
+    1. Summary: One sentence describing the changes
+    2. Issues: List 0-3 potential problems (file:line format)
+    3. Suggestions: Brief fix recommendations
+    4. Confidence: low/medium/high with brief reason
 
-Static Analysis:
-${eslintOut}
+    Static Analysis:
+    ${eslintOut}
 
-Code Diff:
-${trimmedDiff}
+    Code Diff:
+    ${trimmedDiff}
 
-Respond with the review now.`.trim().slice(0, 16000);
+    Respond with the review now.`.trim().slice(0, 16000);
 
   // Call LLM - replace URL + payload with the provider you have
   const lmmUrl = 'https://labs-ai-proxy.acloud.guru/openai/chatgpt-4o/v1/chat/completions'; // example: pluralsight
@@ -53,7 +54,7 @@ Respond with the review now.`.trim().slice(0, 16000);
   }
 
   const body = {
-    model: "gpt-4o-mini", // adjust to your model
+    model: "chatgpt-4o", // adjust to your model
     messages: [{ role: 'user', content: prompt }],
     max_tokens: 2000,
     temperature: 0.2,
