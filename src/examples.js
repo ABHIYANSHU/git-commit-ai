@@ -16,3 +16,7 @@ export function divide(a, b) {
   }
   return a / b;
 }
+
+export function power(base, exponent) {
+  return base ** exponent;
+}
