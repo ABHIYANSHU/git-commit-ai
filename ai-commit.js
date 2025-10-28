@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 
 const client = new BedrockRuntimeClient({
-  region: 'us-east-1',
+  region: process.env.AWS_REGION,
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
@@ -21,16 +21,23 @@ function run(cmd) {
 }
 
 async function main() {
-  const diff = run('git diff --cached').slice(0, 8000);
+  let diff = run('git diff --cached');
   
   if (!diff || diff.trim().length === 0) {
     console.log('No staged changes found. Use "git add" first.');
     process.exit(1);
   }
 
+  // For large diffs, use stat summary instead
+  let diffContent = diff;
+  if (diff.length > 8000) {
+    const stat = run('git diff --cached --stat');
+    diffContent = `${stat}\n\nLarge changeset. Key changes:\n${diff.slice(0, 4000)}`;
+  }
+
   const prompt = `Generate a concise git commit message for these changes:
 
-${diff}
+${diffContent}
 
 Follow conventional commits format (type: description).
 Types: feat, fix, docs, style, refactor, test, chore.
@@ -43,11 +50,12 @@ Return ONLY the commit message, nothing else.`;
       messages: [{ role: 'user', content: [{ text: prompt }] }]
     }));
 
-    const message = response.output.message.content[0].text.trim();
+    const message = response.output.message.content[0].text.trim().replace(/[\n\r]/g, ' ');
     console.log('\nGenerated commit message:', message);
     
-    // Auto-commit
-    run(`git commit -m "${message.replace(/"/g, '\\"')}"`);
+    // Auto-commit with sanitized message
+    const sanitized = message.replace(/"/g, '\\"');
+    execSync(`git commit -m "${sanitized}"`, { encoding: 'utf8' });
     console.log('✓ Changes committed successfully!');
     console.log('\nYou can now run: git push');
   } catch (error) {

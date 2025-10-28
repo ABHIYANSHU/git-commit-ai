@@ -3,7 +3,7 @@ import { execSync } from 'child_process';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 
 const client = new BedrockRuntimeClient({
-  region: 'us-east-1',
+  region: process.env.AWS_REGION,
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
@@ -15,7 +15,7 @@ function run(cmd) {
   catch (e) {
     console.error(`Command failed: ${cmd}`);
     console.error(e.message);
-    return e.stdout ? e.stdout.toString() : '';
+    return (e.stdout || '').toString();
   }
 }
 
