@@ -65,6 +65,8 @@ Do not introduce yourself. Start with the review.`.trim().slice(0, 16000);
     ]
   };
 
+  console.log('Calling LLM with prompt:', userPrompt);
+
   const res = await fetch(lmmUrl, {
     method: 'POST',
     headers: {
