@@ -1,6 +1,14 @@
 // ai-review.js
 import { execSync } from 'child_process';
-// Using global fetch available in Node.js 18+
+import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+
+const client = new BedrockRuntimeClient({
+  region: 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  }
+});
 
 function run(cmd) {
   try { return execSync(cmd, { encoding: 'utf8' }); }
@@ -51,62 +59,17 @@ Provide a structured review with:
 
 Do not introduce yourself. Start with the review.`.trim().slice(0, 16000);
 
-  // Call LLM - replace URL + payload with the provider you have
-  const lmmUrl = 'https://labs-ai-proxy.acloud.guru/stream/openai/chatgpt-4o/v1/chat/completions'; // example: pluralsight
-  const apiKey = process.env.LLM_API_KEY;
-  if (!apiKey) {
-    console.error('LLM_API_KEY not set. Exiting.');
-    process.exit(1);
-  }
-
-  const body = {
-    messages: [
-      { role: 'user', content: userPrompt }
-    ]
-  };
-
   console.log('Calling LLM with prompt:', userPrompt);
 
-  const res = await fetch(lmmUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
+  const response = await client.send(new ConverseCommand({
+    modelId: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
+    messages: [{
+      role: 'user',
+      content: [{ text: userPrompt }]
+    }]
+  }));
 
-  if (!res.ok) {
-    const txt = await res.text();
-    console.error('LLM call failed', res.status, txt);
-    process.exit(1);
-  }
-
-  const txt = await res.text();
-  let commentText = '';
-  
-  // Handle SSE streaming format
-  if (txt.startsWith('data:')) {
-    const lines = txt.split('\n').filter(line => line.startsWith('data:'));
-    for (const line of lines) {
-      try {
-        const data = JSON.parse(line.slice(5).trim());
-        if (data.token) commentText += data.token;
-      } catch (e) { /* skip invalid lines */ }
-    }
-  } else {
-    // Handle standard JSON response
-    try {
-      const json = JSON.parse(txt);
-      if (typeof json !== 'object' || json === null) {
-        throw new Error('Invalid response format');
-      }
-      commentText = json.choices?.[0]?.message?.content ?? JSON.stringify(json, null, 2);
-    } catch (e) {
-      console.error('Failed to parse JSON response:', txt.slice(0, 500));
-      process.exit(1);
-    }
-  }
+  const commentText = response.output.message.content[0].text;
 
   console.log('\n--- LLM Generated Review ---\n', commentText);
 
