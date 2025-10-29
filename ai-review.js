@@ -1,30 +1,37 @@
-// ai-review.js
+// ai-review.js - Automated AI code review for GitHub pull requests
 import { execSync } from 'child_process';
-import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+import { createBedrockClient, callAI, log } from './utils.js';
+import { DIFF_CONFIG, sanitizeESLintOutput } from './config.js';
 
-const client = new BedrockRuntimeClient({
-  region: 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  }
-});
+let client;
+
+// Initialize client with error handling
+try {
+  client = createBedrockClient();
+} catch (error) {
+  console.error('Initialization failed:', error.message);
+  process.exit(1);
+}
 
 function run(cmd) {
   try { return execSync(cmd, { encoding: 'utf8' }); }
-  catch (e) { return e.stdout ? e.stdout.toString() : ''; }
+  catch (e) {
+    console.error(`Command failed: ${cmd}`);
+    console.error(e.message);
+    return (e.stdout || '').toString();
+  }
 }
 
+// Remove sensitive information from diff before sending to AI
 function scrubSecrets(text) {
-  // naive patterns — expand as needed
   return text
     .replace(/AKIA[0-9A-Z]{16}/g, '[REDACTED_AWS_KEY]')
     .replace(/(?:ssh-rsa|ssh-ed25519)\\s+[A-Za-z0-9+/=]+/g, '[REDACTED_SSH_KEY]');
 }
 
 async function main() {
-  // PR diff relative to main — limited hunks only
-  const diff = run('git --no-pager diff origin/main...HEAD --unified=0').slice(0, 9000);
+  // Get PR diff (changes between main branch and current HEAD)
+  const diff = run('git --no-pager diff origin/main...HEAD --unified=0').slice(0, DIFF_CONFIG.MAX_DIFF_FOR_PR);
   const trimmedDiff = scrubSecrets(diff);
   
   if (!trimmedDiff || trimmedDiff.trim().length === 0) {
@@ -32,13 +39,9 @@ async function main() {
     return;
   }
 
-  // Run ESLint (JS/TS) and capture JSON output (if available)
-  let eslintOut = '';
-  try {
-    eslintOut = run('npx eslint . -f json --no-error-on-unmatched-pattern').slice(0, 8000);
-  } catch (e) {
-    eslintOut = 'ESLint failed or no JS files.';
-  }
+  // Run ESLint for additional code quality insights
+  const eslintRaw = run('npx eslint . -f json --no-error-on-unmatched-pattern 2>/dev/null').slice(0, DIFF_CONFIG.MAX_ESLINT_OUTPUT);
+  const eslintOut = sanitizeESLintOutput(eslintRaw);
 
   // Build prompt (structured)
   const userPrompt = `You are an expert code reviewer. Analyze the following code changes and provide a comprehensive review.
@@ -70,27 +73,21 @@ async function main() {
 
   Start your review now.`.trim().slice(0, 16000);
 
+  // Call AI for code review with retry logic
   let commentText;
   try {
-    const response = await client.send(new ConverseCommand({
-      modelId: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
-      messages: [{
-        role: 'user',
-        content: [{ text: userPrompt }]
-      }]
-    }));
-
-    commentText = response.output.message.content[0].text;
-    const usage = response.usage;
-    console.log('Token usage:', { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens });
+    log('Calling AI for code review...');
+    const { text, usage } = await callAI(client, userPrompt);
+    commentText = text;
+    log(`Token usage: ${usage.inputTokens} in, ${usage.outputTokens} out, ${usage.totalTokens} total`);
   } catch (error) {
-    console.error('AWS Bedrock API call failed:', error.message);
+    log(`AI review failed: ${error.message}`, 'error');
     commentText = `⚠️ AI review failed: ${error.message}\n\nPlease review the code changes manually.`;
   }
 
   console.log('\n--- LLM Generated Review ---\n', commentText);
 
-  // Compute PR number
+  // Extract PR number from GitHub environment
   const ref = process.env.GITHUB_REF || '';
   const prMatch = ref.match(/refs\/pull\/(\d+)\/merge/) || ref.match(/pull\/(\d+)/);
   const prNumber = (prMatch && prMatch[1]) || process.env.PR_NUMBER;
@@ -107,6 +104,7 @@ async function main() {
     process.exit(1);
   }
 
+  // Post AI review as PR comment
   const commentBody = `**AI Review (automated):**\n\n${commentText}\n\n_AI suggestion — review required._`;
 
   const postRes = await fetch(`https://api.github.com/repos/${repo}/issues/${prNumber}/comments`, {

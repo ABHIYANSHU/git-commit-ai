@@ -1,7 +1,13 @@
 {
   "type": "module",
+  "scripts": {
+    "commit": "node ai-commit.js",
+    "setup-hook": "node setup-hook.js"
+  },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.918.0",
-    "axios": "^1.13.0"
+    "axios": "^1.13.0",
+    "dotenv": "^17.2.3",
+    "simple-git": "^3.28.0"
   }
 }

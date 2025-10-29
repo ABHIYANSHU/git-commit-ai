@@ -1,0 +1,10 @@
+#!/bin/sh
+# Git pre-push hook - auto-commit staged changes before push
+
+# Check for staged changes
+if ! git diff --cached --quiet; then
+  echo "Staged changes detected. Running AI commit..."
+  node ai-commit.js
+fi
+
+exit 0

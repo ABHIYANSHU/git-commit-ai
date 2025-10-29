@@ -1,0 +1,5 @@
+* text=auto
+*.sh text eol=lf
+*.js text eol=crlf
+pre-push text eol=lf
+.gitattributes text eol=crlf
